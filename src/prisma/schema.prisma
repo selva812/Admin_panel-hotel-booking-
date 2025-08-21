@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model payment {
+  id            Int      @id @default(autoincrement())
+  bookingId     Int
+  amount        Decimal  @db.Decimal(10, 2)
+  method        Int //0- cash    1 -card  2- online
+  date          DateTime @default(now())
+  isadvance     Boolean  @default(true)
+  transactionid String?
+  note          String?
+  createdAt     DateTime @default(now())
+  booking       booking  @relation(fields: [bookingId], references: [id])
+  billId        Int? // Make this optional if payments can exist without a bill
+  bill          bill?    @relation(fields: [billId], references: [id])
+  status        Boolean  @default(true)
+
+  @@index([bookingId], name: "payment_bookingId_index")
+  @@index([billId], name: "payment_billId_index")
+}
+
+model booking {
+  id                 Int               @id @default(autoincrement())
+  userId             Int
+  bookingref         String
+  customerId         Int
+  isonline           Boolean           @default(false)
+  bookedById         Int?
+  rooms              Int
+  date               DateTime
+  createdAt          DateTime          @default(now())
+  arriveFrom         String?
+  bookingTypeId      Int
+  type               Boolean           @default(true)
+  isadvance          Boolean           @default(false)
+  bookingReferenceId Int?
+  purposeOfVisitId   Int?
+  bookingstatus      Int
+  services           service[]
+  purposeOfVisit     purposeOfVisit?   @relation(fields: [purposeOfVisitId], references: [id])
+  user               user?             @relation("BookingUser", fields: [userId], references: [id])
+  bookedBy           user?             @relation("BookingBookedBy", fields: [bookedById], references: [id])
+  customer           customer          @relation(fields: [customerId], references: [id])
+  bookedRooms        bookingRoom[]
+  bookingType        bookingType       @relation(fields: [bookingTypeId], references: [id])
+  bookingReference   bookingReference? @relation(fields: [bookingReferenceId], references: [id])
+  status             Boolean           @default(true)
+  payments           payment[]
+  bill               bill?             @relation("BookingBill")
+
+  @@index([bookedById], map: "Booking_bookedById_fkey")
+  @@index([customerId], map: "Booking_customerId_fkey")
+  @@index([userId], map: "Booking_userId_fkey")
+  @@index([purposeOfVisitId], map: "booking_purpose_visit_fkey")
+}
+
+model bill {
+  id          Int       @id @default(autoincrement())
+  invoiceId   String?
+  bookingId   Int       @unique
+  istax       Boolean   @default(true)
+  booking     booking   @relation("BookingBill", fields: [bookingId], references: [id])
+  totalAmount Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  status      Boolean   @default(true)
+  payments    payment[]
+}
+
+model bookingRoom {
+  id            Int         @id @default(autoincrement())
+  bookingId     Int
+  roomId        Int
+  stayedById    Int?
+  checkIn       DateTime
+  checkOut      DateTime
+  bookedPrice   Decimal     @db.Decimal(10, 2)
+  tax           Decimal?    @db.Decimal(10, 2)
+  stayed        Int?
+  adults        Int?
+  children      Int?
+  extraBeds     Int         @default(0)
+  extraBedPrice Decimal?    @db.Decimal(10, 2)
+  occupancies   occupancy[]
+  booking       booking     @relation(fields: [bookingId], references: [id])
+  room          room        @relation(fields: [roomId], references: [id])
+  isAc          Boolean     @default(false)
+  ExtraBed      extraBed[]
+  isCheckedOut  Boolean     @default(false)
+  stayedBy      user?       @relation("BookingStayedBy", fields: [stayedById], references: [id])
+  status        Boolean     @default(true)
+
+  @@unique([bookingId, roomId])
+  @@index([stayedById], map: "Booking_stayedById_fkey")
+}
+
+model room {
+  id                Int           @id @default(autoincrement())
+  roomNumber        String        @unique
+  roomstatus        Int           @default(0)
+  description       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime
+  occupancy         Int           @default(1)
+  acPrice           Decimal       @db.Decimal(10, 2)
+  nonAcPrice        Decimal       @db.Decimal(10, 2)
+  online_acPrice    Decimal       @db.Decimal(10, 2)
+  online_nonAcPrice Decimal       @db.Decimal(10, 2)
+  isAc              Boolean       @default(false)
+  lastUpdatedById   Int?
+  typeId            Int
+  floorId           Int
+  type              roomtype      @relation(fields: [typeId], references: [id])
+  floor             floornumber   @relation(fields: [floorId], references: [id])
+  lastUpdatedBy     user?         @relation(name: "RoomLastUpdatedBy", fields: [lastUpdatedById], references: [id])
+  bookingRooms      bookingRoom[]
+  status            Boolean       @default(true)
+  roomStatus        Int?
+
+  @@index([floorId], map: "Room_floorId_fkey")
+  @@index([lastUpdatedById], map: "Room_lastUpdatedById_fkey")
+  @@index([typeId], map: "Room_typeId_fkey")
+}
+
+model occupancy {
+  id            Int         @id @default(autoincrement())
+  bookingRoomId Int
+  name          String
+  address       String?
+  phone         String?
+  photo         String?
+  status        Boolean     @default(true)
+  bookingRoom   bookingRoom @relation(fields: [bookingRoomId], references: [id])
+}
+
+model user {
+  id             Int                @id @default(autoincrement())
+  name           String             @unique
+  email          String             @unique
+  password       String
+  role           Int                @default(0)
+  createdAt      DateTime           @default(now())
+  address        String
+  phone          String             @unique
+  lastLogin      DateTime?
+  lastLogout     DateTime?
+  isOnline       Boolean            @default(false)
+  bookings       booking[]          @relation("BookingUser")
+  bookedBookings booking[]          @relation("BookingBookedBy")
+  stayedBookings bookingRoom[]      @relation("BookingStayedBy")
+  updatedRooms   room[]             @relation("RoomLastUpdatedBy")
+  activityLogs   userActivityLog[]
+  bookingStats   userBookingStats[]
+  status         Boolean            @default(true)
+  Expense        expense[]          @relation("ExpenseRecorder")
+
+  @@index([email, phone])
+}
+
+model purposeOfVisit {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  bookings booking[]
+}
+
+model bookingType {
+  id      Int       @id @default(autoincrement())
+  name    String    @unique
+  booking booking[]
+}
+
+model extraBed {
+  id        Int           @id @default(autoincrement())
+  price     Decimal       @db.Decimal(10, 2)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  bookings  bookingRoom[]
+}
+
+model bookingReference {
+  id          Int       @id @default(autoincrement())
+  companyName String
+  referenceId String    @unique
+  booking     booking[]
+}
+
+model service {
+  id        Int      @id @default(autoincrement())
+  name      String
+  room      Int?
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  bookingId Int
+  status    Boolean  @default(true)
+  booking   booking  @relation(fields: [bookingId], references: [id])
+}
+
+model customer {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phoneNumber String    @unique
+  picture     String?
+  idNumber    String?
+  idPicture   String?
+  address     String?
+  companyName String?
+  gst_no      String?
+  createdAt   DateTime  @default(now())
+  status      Boolean   @default(true)
+  bookings    booking[]
+}
+
+model floornumber {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  rooms room[]
+}
+
+model roomtype {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  rooms       room[]
+}
+
+model userActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      user     @relation(fields: [userId], references: [id])
+  type      Int
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([timestamp])
+}
+
+model userBookingStats {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         user     @relation(fields: [userId], references: [id])
+  date         DateTime
+  bookingCount Int      @default(0)
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model tax {
+  id         Int    @id @default(autoincrement())
+  percentage Float
+  name       String @unique
+}
+
+model hotel_info {
+  id      Int    @id @default(autoincrement())
+  gst     String
+  name    String
+  contact String
+  address String
+  logo    String
+}
+
+model bookingprefix {
+  id     Int     @id @default(autoincrement())
+  prefix String
+  number Int
+  status Boolean @default(false)
+}
+
+model invoiceprefix {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  prefix String
+  number Int
+  status Boolean @default(false)
+}
+
+model expense {
+  id            Int             @id @default(autoincrement())
+  entrytype     Boolean // 0 = expense, 1 = income
+  categoryId    Int
+  amount        Decimal         @db.Decimal(10, 2)
+  description   String?
+  date          DateTime        @default(now())
+  transactionId String?
+  paymentMethod Int
+  recordedBy    Int
+  attachment    String?         @db.Text
+  vendorid      Int
+  status        Int             @default(1)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  category      expenseCategory @relation(fields: [categoryId], references: [id])
+  recorder      user            @relation("ExpenseRecorder", fields: [recordedBy], references: [id])
+  vendor        vendor          @relation(fields: [vendorid], references: [id]) // ✅ Vendor relation
+
+  @@index([categoryId], name: "expense_category_idx")
+  @@index([date], name: "expense_date_idx")
+}
+
+model expenseCategory {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  status      Int       @default(1)
+  expenses    expense[]
+
+  @@map("expenseCategory")
+}
+
+model vendor {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phonenumber String    @unique
+  address     String?
+  expenses    expense[]
+}
