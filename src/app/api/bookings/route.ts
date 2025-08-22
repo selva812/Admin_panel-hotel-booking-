@@ -188,12 +188,13 @@ export async function PUT(request: NextRequest) {
       rooms,
       bookedRooms,
       id,
-      roomChanges // New field for room changes
+      roomChanges, // New field for room changes
+      isOnline // New field for online pricing
     } = await request.json()
 
     // Start a transaction to ensure data consistency
     const result = await prisma.$transaction(async tx => {
-      // First update the booking
+      // First update the booking with online status
       const updatedBooking = await tx.booking.update({
         where: { id: parseInt(id) },
         data: {
@@ -203,7 +204,8 @@ export async function PUT(request: NextRequest) {
           date: new Date(date),
           arriveFrom,
           isadvance,
-          rooms
+          rooms,
+          isonline: isOnline || false // Update online status
         }
       })
 
@@ -247,25 +249,87 @@ export async function PUT(request: NextRequest) {
         }
       }
 
-      // Update all the booked rooms with other details
+      // Get existing booking room IDs
+      const existingBookingRoomIds = bookedRooms.filter((room: any) => room.id).map((room: any) => room.id)
+
+      // Delete removed rooms
+      if (existingBookingRoomIds.length > 0) {
+        await tx.bookingRoom.deleteMany({
+          where: {
+            bookingId: parseInt(id),
+            NOT: {
+              id: { in: existingBookingRoomIds }
+            }
+          }
+        })
+      }
+
+      // Update existing rooms and create new ones
       const updatedRooms = await Promise.all(
         bookedRooms.map(async (room: any) => {
-          return await tx.bookingRoom.update({
-            where: { id: room.id },
-            data: {
-              checkIn: new Date(room.checkIn),
-              checkOut: new Date(room.checkOut),
-              adults: parseInt(room.adults),
-              children: parseInt(room.children),
-              extraBeds: parseInt(room.extraBeds),
-              isAc: room.isAc,
-              // Update booked price based on AC/Non-AC selection
-              bookedPrice:
-                room.bookedPrice || room.isAc
-                  ? (await tx.room.findUnique({ where: { id: room.roomId } }))?.acPrice || 0
-                  : (await tx.room.findUnique({ where: { id: room.roomId } }))?.nonAcPrice || 0
+          // Calculate booked price based on online status and AC preference
+          let bookedPrice = room.bookedPrice
+
+          if (room.roomId) {
+            const roomData = await tx.room.findUnique({
+              where: { id: room.roomId },
+              include: { type: true }
+            })
+
+            if (roomData) {
+              if (isOnline) {
+                bookedPrice = room.isAc ? roomData.online_acPrice || 0 : roomData.online_nonAcPrice || 0
+              } else {
+                bookedPrice = room.isAc ? roomData.acPrice || 0 : roomData.nonAcPrice || 0
+              }
             }
-          })
+          }
+
+          if (room.id) {
+            // Update existing room
+            return await tx.bookingRoom.update({
+              where: { id: room.id },
+              data: {
+                roomId: room.roomId,
+                checkIn: new Date(room.checkIn),
+                checkOut: new Date(room.checkOut),
+                adults: parseInt(room.adults) || 1,
+                children: parseInt(room.children) || 0,
+                extraBeds: parseInt(room.extraBeds) || 0,
+                isAc: room.isAc,
+                bookedPrice: bookedPrice
+              }
+            })
+          } else {
+            // Create new room
+            if (!room.roomId) {
+              throw new Error('Room ID is required for new rooms')
+            }
+
+            // Update room status to occupied
+            await tx.room.update({
+              where: { id: room.roomId },
+              data: {
+                roomStatus: 1,
+                lastUpdatedById: user.id,
+                updatedAt: new Date()
+              }
+            })
+
+            return await tx.bookingRoom.create({
+              data: {
+                bookingId: parseInt(id),
+                roomId: room.roomId,
+                checkIn: new Date(room.checkIn),
+                checkOut: new Date(room.checkOut),
+                adults: parseInt(room.adults) || 1,
+                children: parseInt(room.children) || 0,
+                extraBeds: parseInt(room.extraBeds) || 0,
+                isAc: room.isAc,
+                bookedPrice: bookedPrice
+              }
+            })
+          }
         })
       )
 

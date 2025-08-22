@@ -29,6 +29,8 @@ interface Room {
     id: number;
     roomNumber: string;
     acPrice: number;
+    online_acPrice: number;
+    online_nonAcPrice: number;
     nonAcPrice: number;
     type: { id: number; name: string };
     floor: { id: number; name: string };
@@ -49,6 +51,7 @@ interface BookedRoom {
 type BookingType = {
     id: number;
     bookingref: string;
+    isonline: boolean;
     bookedRooms: BookedRoom[];
 };
 interface BookingFilters {
@@ -85,7 +88,6 @@ export default function BookingTable() {
     const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [editingBooking, setEditingBooking] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-
     const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
     const [customer, setCustomer] = useState<Customer | null>();
     const [selectedBooking, setSelectedBooking] = useState<BookingType | null>(null);
@@ -102,8 +104,6 @@ export default function BookingTable() {
     const handleNavigate = () => {
         setIsNavigating(true)
         router.push('/dashboards/booking/create')
-        // The loading state will automatically reset when navigation completes
-        // because the component will unmount during navigation
     }
     const openModal = (bookingId: any) => {
         setSelectedBookingId(bookingId)
@@ -123,7 +123,6 @@ export default function BookingTable() {
             setShowSuggestions(false);
             return;
         }
-
         try {
             const res = await fetch(`/api/customers/search?phone=${phone}`);
             const data = await res.json();
@@ -564,7 +563,7 @@ export default function BookingTable() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        bookings.map((booking) => (
+                                        bookings.map((booking: any) => (
                                             <tr key={booking.id} className="hover:bg-gray-50 transition-colors cursor-pointer "
                                             // onClick={() =>
                                             //     router.push(`/dashboards/booking/details?id=${booking.id}`)}

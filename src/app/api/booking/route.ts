@@ -552,6 +552,7 @@ export async function GET(req: Request) {
           bookingstatus: true,
           id: true,
           date: true,
+          isonline: true,
           bookedBy: {
             select: {
               name: true

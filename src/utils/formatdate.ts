@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon'
 
-export function parseISTDate(dateString: string): Date {
+export function parseISTDate(dateString: any): Date {
   const customFormat = "yyyyMMdd'T'HH:mm:ss.SSS"
 
   const dt = DateTime.fromFormat(dateString, customFormat, {

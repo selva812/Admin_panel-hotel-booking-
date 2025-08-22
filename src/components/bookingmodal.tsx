@@ -1,12 +1,14 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { X, Calendar, User, Bed, CreditCard, Check, XCircle, Clock, Edit, ArrowRight, Home, Loader2, Save, Snowflake, Sun, Search, RefreshCw } from 'lucide-react';
+import { X, Calendar, User, Bed, CreditCard, Check, XCircle, Clock, Edit, ArrowRight, Home, Loader2, Save, Snowflake, Sun, Search, RefreshCw, Trash2, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { TransparentLoader } from './transparent';
 interface Room {
     id: number;
     roomNumber: string;
     acPrice: number;
+    online_acPrice: number;
+    online_nonAcPrice: number;
     nonAcPrice: number;
     type: { id: number; name: string };
     floor: { id: number; name: string };
@@ -28,6 +30,7 @@ interface BookedRoom {
 interface Booking {
     id: number;
     bookingref: string;
+    isonline: boolean;
     bookedRooms: BookedRoom[];
 }
 
@@ -51,6 +54,7 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
     const [error, setError] = useState<string | null>(null);
     const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
     const [roomChanges, setRoomChanges] = useState<RoomChange[]>([]);
+    const [isOnline, setIsOnline] = useState(booking.isonline || false);
     const [showRoomSelector, setShowRoomSelector] = useState<{ [key: number]: boolean }>({});
     const statusOptions = [
         { value: 0, label: 'Checked Out', icon: <Check className="w-4 h-4 mr-2" /> },
@@ -119,7 +123,6 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
         setIsLoading(true);
 
         try {
-
             const response = await fetch(`/api/bookings?id=${booking.id}`, {
                 method: 'PUT',
                 headers: {
@@ -149,9 +152,6 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
             setIsLoading(false);
         }
     };
-
-
-
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         try {
             const { name, value, type } = e.target;
@@ -165,7 +165,40 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
             console.error(error);
         }
     };
+    // Add room function
+    const addRoom = () => {
+        const newRoom = {
+            id: null, // Will be created on save
+            bookingId: booking.id,
+            roomId: null,
+            checkIn: new Date().toISOString().slice(0, 16),
+            checkOut: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+            bookedPrice: 0,
+            adults: 1,
+            children: 0,
+            extraBeds: 0,
+            isAc: false,
+            room: null
+        };
 
+        setFormData((prev: { rooms: number; bookedRooms: any; }) => ({
+            ...prev,
+            rooms: prev.rooms + 1,
+            bookedRooms: [...prev.bookedRooms, newRoom]
+        }));
+        toast.success('Room added successfully');
+    };
+
+    // Remove room function
+    const removeRoom = (index: any) => {
+        const updatedRooms = formData.bookedRooms.filter((_: any, i: any) => i !== index);
+        setFormData((prev: { rooms: number; }) => ({
+            ...prev,
+            rooms: prev.rooms - 1,
+            bookedRooms: updatedRooms
+        }));
+        toast.success('Room removed successfully');
+    };
     const handleRoomChange = (index: number, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         try {
             const { name, value, type } = e.target;
@@ -174,10 +207,18 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
 
             if (name === 'isAc') {
                 const room = availableRooms.find(r => r.id === updatedRooms[index].roomId) || updatedRooms[index].room;
+                let price = 0;
+
+                if (isOnline) {
+                    price = checked ? room?.online_acPrice || 0 : room?.online_nonAcPrice || 0;
+                } else {
+                    price = checked ? room?.acPrice || 0 : room?.nonAcPrice || 0;
+                }
+
                 updatedRooms[index] = {
                     ...updatedRooms[index],
                     [name]: checked,
-                    bookedPrice: checked ? room?.acPrice || 0 : room?.nonAcPrice || 0
+                    bookedPrice: price
                 };
                 toast.success(`Changed to ${checked ? 'AC' : 'Non-AC'} mode`);
             } else {
@@ -194,6 +235,7 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
         }
     };
 
+    // Modified handleRoomSelection to consider online pricing
     const handleRoomSelection = (roomIndex: number, newRoomId: number) => {
         try {
             const newRoom = availableRooms.find(room => room.id === newRoomId);
@@ -205,7 +247,13 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
             const updatedRooms = [...formData.bookedRooms];
             const oldRoomId = updatedRooms[roomIndex].roomId;
             const isAc = updatedRooms[roomIndex].isAc;
-            const newPrice = isAc ? newRoom.acPrice : newRoom.nonAcPrice;
+
+            let newPrice = 0;
+            if (isOnline) {
+                newPrice = isAc ? newRoom.online_acPrice : newRoom.online_nonAcPrice;
+            } else {
+                newPrice = isAc ? newRoom.acPrice : newRoom.nonAcPrice;
+            }
 
             // Update the room in formData
             updatedRooms[roomIndex] = {
@@ -237,10 +285,7 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                 setRoomChanges(prev => [...prev, roomChange]);
             }
 
-            // Show success message
             toast.success(`Room changed to ${newRoom.roomNumber}`);
-
-            // Hide room selector
             setShowRoomSelector(prev => ({ ...prev, [roomIndex]: false }));
         } catch (error) {
             toast.error('Failed to change room');
@@ -254,7 +299,6 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
             [roomIndex]: !prev[roomIndex]
         }));
     };
-
 
     if (error) {
         return (
@@ -416,14 +460,38 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                                     </div>
                                 </div>
                             </div>
-
                             {/* Booked Rooms Section */}
                             <div className="pt-8 border-t border-gray-200">
-                                <div className="flex items-center space-x-3 mb-6">
-                                    <Bed className="w-5 h-5 text-blue-600" />
-                                    <h3 className="text-lg font-semibold text-gray-800">
-                                        Booked Rooms
-                                    </h3>
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center space-x-3">
+                                        <Bed className="w-5 h-5 text-blue-600" />
+                                        <h3 className="text-lg font-semibold text-gray-800">
+                                            Booked Rooms
+                                        </h3>
+                                        {/* Online Checkbox */}
+                                        <div className="flex items-center space-x-2 ml-6">
+                                            <input
+                                                type="checkbox"
+                                                id="isOnline"
+                                                checked={isOnline}
+                                                onChange={(e) => setIsOnline(e.target.checked)}
+                                                className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                                            />
+                                            <label htmlFor="isOnline" className="text-sm font-medium text-gray-700">
+                                                Online Booking
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Add Room Button */}
+                                    <button
+                                        type="button"
+                                        onClick={addRoom}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center space-x-2 shadow-sm"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        <span>Add Room</span>
+                                    </button>
                                 </div>
 
                                 <div className="space-y-5">
@@ -441,17 +509,31 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                                                 </div>
                                                 <div className="flex items-center space-x-4">
                                                     <div className="text-sm text-gray-600">
-                                                        Current: <span className="font-medium">{room.room?.roomNumber}</span> (
-                                                        {room.room?.type?.name})
+                                                        Current: <span className="font-medium">{room.room?.roomNumber || 'Not Selected'}</span>
+                                                        {room.room?.type?.name && ` (${room.room.type.name})`}
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => toggleRoomSelector(index)}
-                                                        className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center space-x-2 shadow-sm"
-                                                    >
-                                                        <RefreshCw className="w-4 h-4" />
-                                                        <span>Change Room</span>
-                                                    </button>
+                                                    <div className="flex items-center space-x-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleRoomSelector(index)}
+                                                            className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center space-x-2 shadow-sm"
+                                                        >
+                                                            <RefreshCw className="w-4 h-4" />
+                                                            <span>Change Room</span>
+                                                        </button>
+
+                                                        {/* Remove Room Button - Only show if more than 1 room */}
+                                                        {formData.rooms > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeRoom(index)}
+                                                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center space-x-2 shadow-sm"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                                <span>Remove</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -483,11 +565,11 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                                                                 <div className="mt-1 text-xs text-gray-500 flex items-center space-x-2">
                                                                     <span className="flex items-center">
                                                                         <Snowflake className="w-3 h-3 mr-1" />
-                                                                        ₹{availableRoom.acPrice}
+                                                                        ₹{isOnline ? availableRoom.online_acPrice : availableRoom.acPrice}
                                                                     </span>
                                                                     <span className="flex items-center">
                                                                         <Sun className="w-3 h-3 mr-1" />
-                                                                        ₹{availableRoom.nonAcPrice}
+                                                                        ₹{isOnline ? availableRoom.online_nonAcPrice : availableRoom.nonAcPrice}
                                                                     </span>
                                                                 </div>
                                                             </button>
@@ -606,8 +688,12 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                                                         >
                                                             Air Conditioning (₹
                                                             {room.isAc
-                                                                ? room.room?.acPrice || 0
-                                                                : room.room?.nonAcPrice || 0}
+                                                                ? isOnline
+                                                                    ? room.room?.online_acPrice || 0
+                                                                    : room.room?.acPrice || 0
+                                                                : isOnline
+                                                                    ? room.room?.online_nonAcPrice || 0
+                                                                    : room.room?.nonAcPrice || 0}
                                                             )
                                                         </label>
                                                     </div>
@@ -617,7 +703,15 @@ const EditBookingModal: React.FC<EditBookingModalProps> = ({ booking, onClose, o
                                             <div className="px-5 py-3 bg-gray-50 border-t flex justify-between items-center">
                                                 <div className="text-sm text-gray-600">
                                                     <span className="font-medium">Current Price:</span> ₹
-                                                    {room.bookedPrice}
+                                                    {room.isAc
+                                                        ? isOnline
+                                                            ? room.room?.online_acPrice || 0
+                                                            : room.room?.acPrice || 0
+                                                        : isOnline
+                                                            ? room.room?.online_nonAcPrice || 0
+                                                            : room.room?.nonAcPrice || 0}
+
+                                                    {isOnline && <span className="ml-2 text-blue-600 font-medium">(Online Rate)</span>}
                                                 </div>
                                             </div>
                                         </div>

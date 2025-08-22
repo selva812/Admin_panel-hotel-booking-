@@ -27,9 +27,7 @@ export async function GET(request: NextRequest) {
     const todayIST = toZonedTime(new Date(), TIMEZONE)
     const todayDateOnly = startOfDay(todayIST)
     const requestedDateOnly = startOfDay(requestedDate)
-
     const totalRooms = await prisma.room.count({ where: { status: true } })
-
     console.log(`Requested date: ${format(requestedDateOnly, 'yyyy-MM-dd')}`)
     console.log(`Today: ${format(todayDateOnly, 'yyyy-MM-dd')}`)
 
@@ -95,11 +93,7 @@ export async function GET(request: NextRequest) {
           lte: endOfDayUTC
         }
       },
-      select: {
-        id: true,
-        bookingref: true,
-        rooms: true,
-        date: true,
+      include: {
         customer: {
           select: {
             name: true,
@@ -108,10 +102,15 @@ export async function GET(request: NextRequest) {
             address: true,
             companyName: true
           }
+        },
+        bookedRooms: {
+          select: {
+            room: true,
+            roomId: true
+          }
         }
       }
     })
-
     // Get checked out rooms for today only
     let checkedOutToday: ({
       booking: {
@@ -275,18 +274,10 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+    const requestedRoomIds = new Set(requestedBookings.flatMap(booking => booking.bookedRooms.map(br => br.roomId)))
 
     // Calculate available rooms
-    const availableRooms = allRooms.filter(room => !occupiedRoomIds.has(room.id))
-
-    console.log(`Summary for ${format(requestedDateOnly, 'yyyy-MM-dd')}:`)
-    console.log(`  Total rooms: ${totalRooms}`)
-    console.log(`  Booked rooms: ${bookedRoomsCount}`)
-    console.log(`  Available rooms: ${availableRooms.length}`)
-    console.log(`  Check-ins: ${todayCheckin.length}`)
-    console.log(`  Staying: ${staying.length}`)
-    console.log(`  Overstays: ${overstay.length}`)
-    console.log(`  Check-outs: ${checkout.length}`)
+    const availableRooms = allRooms.filter(room => !occupiedRoomIds.has(room.id) && !requestedRoomIds.has(room.id))
 
     return NextResponse.json({
       date: format(requestedDateOnly, 'yyyy-MM-dd'),

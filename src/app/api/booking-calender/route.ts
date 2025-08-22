@@ -24,9 +24,7 @@ export async function GET(request: NextRequest) {
     // Get current date in IST for comparison
     const todayIST = toZonedTime(new Date(), TIMEZONE)
     const todayDateOnly = startOfDay(todayIST)
-
     const totalRooms = await prisma.room.count({ where: { status: true } })
-
     console.log(`Date range: ${format(startDateIST, 'yyyy-MM-dd')} to ${format(endDateIST, 'yyyy-MM-dd')}`)
     console.log(`Today IST: ${format(todayDateOnly, 'yyyy-MM-dd')}`)
 
@@ -108,9 +106,9 @@ export async function GET(request: NextRequest) {
       const checkOutDate = startOfDay(checkOutIST)
 
       console.log(`Room ${bookingRoom.room.roomNumber} (ID: ${bookingRoom.roomId}):`)
-      console.log(`  CheckIn: ${format(checkInDate, 'yyyy-MM-dd')}`)
-      console.log(`  CheckOut: ${format(checkOutDate, 'yyyy-MM-dd')}`)
-      console.log(`  IsCheckedOut: ${bookingRoom.isCheckedOut}`)
+      console.log(`CheckIn: ${format(checkInDate, 'yyyy-MM-dd')}`)
+      console.log(`CheckOut: ${format(checkOutDate, 'yyyy-MM-dd')}`)
+      console.log(`IsCheckedOut: ${bookingRoom.isCheckedOut}`)
 
       // Determine effective end date for occupancy
       let effectiveEndDate = checkOutDate

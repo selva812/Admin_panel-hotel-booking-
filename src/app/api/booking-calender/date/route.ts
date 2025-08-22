@@ -1,144 +1,7 @@
-// import { PrismaClient } from '@prisma/client'
-// import { NextRequest, NextResponse } from 'next/server'
-
-// const prisma = new PrismaClient()
-
-// export async function GET(request: NextRequest) {
-//   try {
-//     const searchParams = request.nextUrl.searchParams
-//     const dateParam = searchParams.get('date')
-
-//     if (!dateParam) {
-//       return NextResponse.json({ message: 'Date parameter is required' }, { status: 400 })
-//     }
-//     const date = new Date(dateParam)
-//     if (isNaN(date.getTime())) {
-//       return NextResponse.json({ message: 'Invalid date format' }, { status: 400 })
-//     }
-//     const startOfDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
-//     const endOfDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999))
-//     const totalRooms = await prisma.room.count()
-
-//     // Find all bookings that overlap with the requested date
-//     const bookings = await prisma.booking.findMany({
-//       where: {
-//         OR: [
-//           {
-//             bookingstatus: 0,
-//             bookedRooms: {
-//               some: {
-//                 checkIn: { lte: endOfDay },
-//                 checkOut: { gte: startOfDay }
-//               }
-//             }
-//           },
-//           {
-//             bookingstatus: 1,
-//             bookedRooms: {
-//               some: {
-//                 checkIn: { lte: endOfDay },
-//                 checkOut: { gte: startOfDay }
-//               }
-//             }
-//           },
-//           {
-//             bookingstatus: 2,
-//             date: {
-//               gte: startOfDay,
-//               lte: endOfDay
-//             },
-//             status: true
-//           }
-//         ]
-//       },
-//       select: {
-//         id: true,
-//         bookingstatus: true,
-//         rooms: true,
-//         date: true,
-//         bookedRooms: {
-//           select: {
-//             checkIn: true,
-//             checkOut: true,
-//             isCheckedOut: true
-//           }
-//         }
-//       }
-//     })
-
-//     let bookedCount = 0
-
-//     for (const booking of bookings) {
-//       if (booking.bookingstatus === 2) {
-//         bookedCount += booking.rooms || 0
-//       } else {
-//         for (const room of booking.bookedRooms) {
-//           if (
-//             room.checkIn <= endOfDay &&
-//             room.checkOut >= startOfDay &&
-//             room.isCheckedOut === false // ✅ only count rooms not yet checked out
-//           ) {
-//             bookedCount++
-//           }
-//         }
-//       }
-//     }
-
-//     const bookedRoomIds = bookings.map(room => room.id)
-
-//     // 2. Now find all rooms that are NOT in the booked rooms list
-//     const availableRooms = await prisma.room.findMany({
-//       where: {
-//         id: { notIn: bookedRoomIds },
-//         status: true // Only active rooms
-//       },
-//       include: {
-//         type: true,
-//         floor: true
-//       },
-//       orderBy: [{ floorId: 'asc' }, { roomNumber: 'asc' }]
-//     })
-//     const available = Math.max(0, totalRooms - bookedCount)
-
-//     return NextResponse.json({
-//       date: date.toISOString().split('T')[0],
-//       totalRooms,
-//       booked: bookedCount,
-//       available,
-//       availableRooms: availableRooms.map(room => ({
-//         id: room.id,
-//         roomNumber: room.roomNumber,
-//         type: room.type.name,
-//         floor: room.floor.name,
-//         acPrice: room.acPrice,
-//         nonAcPrice: room.nonAcPrice,
-//         online_ac: room.online_acPrice,
-//         online_nonac: room.online_nonAcPrice,
-//         occupancy: room.occupancy
-//       })),
-//       breakdown: {
-//         active: bookings.filter(b => b.bookingstatus === 0).length,
-//         confirmed: bookings.filter(b => b.bookingstatus === 1).length,
-//         requests: bookings.filter(b => b.bookingstatus === 2).length
-//       }
-//     })
-//   } catch (error: any) {
-//     console.error('Availability check error:', error)
-//     return NextResponse.json(
-//       {
-//         message: 'Internal server error',
-//         error: error.message
-//       },
-//       { status: 500 }
-//     )
-//   } finally {
-//     await prisma.$disconnect()
-//   }
-// }
-
 import { prisma } from '@/libs/prisma'
+import { fromZonedTime } from 'date-fns-tz'
 import { NextRequest, NextResponse } from 'next/server'
-
+const INDIA_TIMEZONE = 'Asia/Kolkata'
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -147,8 +10,9 @@ export async function GET(request: NextRequest) {
     if (!dateParam) {
       return NextResponse.json({ message: 'Date parameter is required' }, { status: 400 })
     }
-
-    const date = new Date(dateParam)
+    console.log('date params', dateParam)
+    const date = fromZonedTime(dateParam, INDIA_TIMEZONE)
+    console.log('after convert ', date)
     if (isNaN(date.getTime())) {
       return NextResponse.json({ message: 'Invalid date format' }, { status: 400 })
     }
@@ -164,7 +28,7 @@ export async function GET(request: NextRequest) {
         date.getUTCSeconds() || 0
       )
     )
-
+    console.log('request moment', requestedMoment)
     // Fetch all rooms with relations
     const allRooms = await prisma.room.findMany({
       where: { status: true },
