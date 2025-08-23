@@ -22,6 +22,7 @@ import {
     ShowerHead,
     Coffee
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 type Customer = {
     id: number;
     name: string;
@@ -45,6 +46,7 @@ type Booking = {
 
 export default function RequestBookingPage() {
     const router = useRouter()
+    const { user } = useAuth()
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [phoneNumber, setPhoneNumber] = useState('');
     const [selectedRooms, setSelectedRooms] = useState<number[]>([]);
@@ -89,7 +91,10 @@ export default function RequestBookingPage() {
         occupancy: number;
         online_nonac: number;
         online_ac: number;
-        expectedCheckout: any; id: number; roomNumber: string; type: string; floor: string; isAc: boolean; acPrice: number; nonAcPrice: number
+        nextCheckin: any;
+        expectedCheckout: any; id: number;
+        roomNumber: string; type: string; floor: string; isAc: boolean; acPrice: number; nonAcPrice: number;
+        status: string
     }[]>([])
 
     const openRefundModal = (booking: Booking) => {
@@ -291,8 +296,6 @@ export default function RequestBookingPage() {
         fetchBookings();
     }, [currentPage, pageSize]);
 
-
-
     const searchCustomerByPhone = async (phone: string) => {
         if (phone.length < 3 || hasSelected) {
             setCustomerSuggestions([]);
@@ -414,6 +417,7 @@ export default function RequestBookingPage() {
             setSortOrder('asc');
         }
     };
+
     const SortArrow = ({ column }: { column: 'date' | 'createdAt' | 'status' }) => {
         if (sortBy !== column) return null;
 
@@ -423,6 +427,7 @@ export default function RequestBookingPage() {
             </span>
         );
     };
+
     const resetForm = () => {
         setPhoneNumber('');
         setCustomerName('');
@@ -572,10 +577,12 @@ export default function RequestBookingPage() {
                                     <section className="p-4 bg-white rounded-lg border border-gray-200">
                                         <h3 className="text-lg font-semibold mb-4 text-gray-800">2️⃣ Select Rooms</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
                                             {availableRooms.map((room) => {
                                                 const selected = selectedRooms.includes(room.id);
-                                                const isAvailable = !room.expectedCheckout || new Date(room.expectedCheckout) <= new Date();
+                                                const isAvailable = room.status === 'available';
+                                                const isBlocked = room.status === 'blocked';
+                                                const isBooked = room.status === 'booked' || room.status === 'occupied';
+
                                                 const formattedCheckout = room.expectedCheckout
                                                     ? format(
                                                         toZonedTime(parseISO(room.expectedCheckout), 'Asia/Kolkata'),
@@ -583,25 +590,39 @@ export default function RequestBookingPage() {
                                                     )
                                                     : null;
 
+                                                const formattedCheckin = room.nextCheckin
+                                                    ? format(
+                                                        toZonedTime(parseISO(room.nextCheckin), 'Asia/Kolkata'),
+                                                        'd MMM yyyy, h:mm a'
+                                                    )
+                                                    : null;
+
                                                 return (
                                                     <div
                                                         key={room.id}
-                                                        onClick={() => isAvailable && toggleRoomSelection(room.id)}
+                                                        onClick={() => (isAvailable || isBlocked) && toggleRoomSelection(room.id)}
                                                         className={`relative rounded-lg p-4 border cursor-pointer transition-all h-full flex flex-col
-              ${selected
+        ${selected
                                                                 ? 'border-indigo-500 bg-indigo-50 shadow-md'
-                                                                : !isAvailable
-                                                                    ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-                                                                    : 'border-gray-200 hover:border-indigo-300 hover:shadow-sm bg-white'
+                                                                : isBlocked
+                                                                    ? 'border-yellow-400 bg-yellow-50 hover:border-yellow-500'
+                                                                    : isBooked
+                                                                        ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                                                                        : 'border-gray-200 hover:border-indigo-300 hover:shadow-sm bg-white'
                                                             }`}
                                                     >
                                                         {/* Availability Label - Top Right */}
                                                         <span className={`absolute -top-2 right-2 px-2 py-1 rounded-full text-xs font-medium
-              ${isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                            {isAvailable ? 'Available' : 'Booked'}
+        ${isAvailable
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : isBlocked
+                                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                                    : 'bg-red-100 text-red-800'
+                                                            }`}>
+                                                            {isAvailable ? 'Available' : isBlocked ? 'Blocked' : 'Booked'}
                                                         </span>
 
-                                                        {/* Room Header - Now properly aligned */}
+                                                        {/* Room Header */}
                                                         <div className="mb-3">
                                                             <h4 className="font-bold text-gray-900 flex items-center gap-2 text-sm">
                                                                 <Bed className="w-4 h-4 text-indigo-600" />
@@ -613,7 +634,7 @@ export default function RequestBookingPage() {
                                                             </p>
                                                         </div>
 
-                                                        {/* Pricing Table */}
+                                                        {/* Pricing Table - Only AC Prices */}
                                                         <div className="mt-2 text-xs border border-gray-200 rounded-lg overflow-hidden">
                                                             {/* Table Header */}
                                                             <div className="grid grid-cols-3 bg-gray-50 px-3 py-2 border-b border-gray-200">
@@ -622,8 +643,8 @@ export default function RequestBookingPage() {
                                                                 <span className="text-blue-600 font-medium text-center">Online</span>
                                                             </div>
 
-                                                            {/* AC Row */}
-                                                            <div className={`grid grid-cols-3 px-3 py-2 ${room.isAc ? 'bg-blue-50' : 'bg-white'}`}>
+                                                            {/* AC Row Only */}
+                                                            <div className={`grid grid-cols-3 px-3 py-2 bg-blue-50`}>
                                                                 <span className="text-gray-600 text-left flex items-center gap-1">
                                                                     <Zap className="w-3 h-3 text-blue-500" /> AC
                                                                 </span>
@@ -634,23 +655,18 @@ export default function RequestBookingPage() {
                                                                     <IndianRupee className="w-3 h-3" />{room.online_ac}
                                                                 </span>
                                                             </div>
-
-                                                            {/* Non-AC Row */}
-                                                            <div className="grid grid-cols-3 px-3 py-2 bg-white border-t border-gray-100">
-                                                                <span className="text-gray-600 text-left flex items-center gap-1">
-                                                                    <ZapOff className="w-3 h-3 text-gray-500" /> Non-AC
-                                                                </span>
-                                                                <span className="text-gray-800 font-medium text-center flex items-center justify-center gap-0.5">
-                                                                    <IndianRupee className="w-3 h-3" />{room.nonAcPrice}
-                                                                </span>
-                                                                <span className="text-blue-600 text-center flex items-center justify-center gap-0.5">
-                                                                    <IndianRupee className="w-3 h-3" />{room.online_nonac}
-                                                                </span>
-                                                            </div>
                                                         </div>
 
-                                                        {/* Expected Checkout */}
-                                                        {!isAvailable && (
+                                                        {/* Blocked Status - Show Next Checkin */}
+                                                        {isBlocked && (
+                                                            <div className="mt-3 flex items-center gap-2 text-xs text-yellow-700 bg-yellow-100 p-2 rounded">
+                                                                <CalendarClock className="w-3 h-3" />
+                                                                <span>Check-in: {formattedCheckin}</span>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Booked/Occupied Status - Show Expected Checkout */}
+                                                        {isBooked && (
                                                             <div className="mt-3 flex items-center gap-2 text-xs text-red-500 bg-red-50 p-2 rounded">
                                                                 <CalendarClock className="w-3 h-3" />
                                                                 <span>Available after: {formattedCheckout}</span>
@@ -736,7 +752,6 @@ export default function RequestBookingPage() {
                     </div>
                 </div>
             )}
-
 
             <div className="bg-white shadow-md rounded-lg p-5 border border-gray-200">
                 <div className="flex flex-col md:flex-row md:items-end gap-4">
@@ -953,7 +968,7 @@ export default function RequestBookingPage() {
                                                                     e.stopPropagation();
                                                                     // Handle view action here
                                                                     setSelectedBooking(booking)
-                                                                    console.log('booking', booking)
+
                                                                     setDropdownState({ id: null, x: 0, y: 0 });
                                                                 }}
                                                                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
@@ -964,6 +979,10 @@ export default function RequestBookingPage() {
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
+                                                                    if (user?.role !== 'ADMIN') {
+                                                                        toast.error('Only admin can edit bookings.');
+                                                                        return
+                                                                    }
                                                                     setEditingBooking(booking);
                                                                     setDropdownState({ id: null, x: 0, y: 0 });
                                                                 }}
@@ -1022,6 +1041,10 @@ export default function RequestBookingPage() {
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
+                                                                    if (user?.role !== 'ADMIN') {
+                                                                        toast.error('Only admin can Delete bookings.');
+                                                                        return
+                                                                    }
                                                                     setShowDeleteModal(true)
                                                                     setselectedid(booking.id)
                                                                     setDropdownState({ id: null, x: 0, y: 0 });

@@ -16,7 +16,8 @@ import {
     Legend,
 } from 'chart.js';
 import { Building, Calendar, Users, Hotel, Check, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import { TransparentLoader } from '@/components/transparent';
 
 // Register ChartJS components
 ChartJS.register(
@@ -58,8 +59,10 @@ export default function Dashboard() {
     const [bookingChart, setBookingChart] = useState<BookingChartData | null>(null);
     const [roomTypeData, setRoomTypeData] = useState<RoomTypeData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [pageloading, setpageLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter()
+    const pathname = usePathname()
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
@@ -94,6 +97,10 @@ export default function Dashboard() {
 
         fetchDashboardData();
     }, []);
+    useEffect(() => {
+        // Reset loading whenever the route changes
+        setpageLoading(false);
+    }, [pathname]);
 
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -126,11 +133,14 @@ export default function Dashboard() {
         <div className="min-h-screen bg-gray-100 px-6">
             <div className="max-w-7xl mx-auto">
                 <h1 className="text-3xl font-bold text-gray-800 mb-8">Hotel Dashboard</h1>
-
+                {pageloading && <TransparentLoader />}
                 {/* Stats Overview Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     {/* Total Bookings */}
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer" onClick={() => { router.push('/dashboards/booking') }}>
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 cursor-pointer" onClick={() => {
+                        setpageLoading(true)
+                        router.push('/dashboards/booking')
+                    }}>
                         <div className="flex justify-between items-center">
                             <div>
                                 <p className="text-sm font-medium text-gray-500">Total Bookings</p>
@@ -156,7 +166,10 @@ export default function Dashboard() {
                     </div>
 
                     {/* Total Rooms */}
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer" onClick={() => { router.push('/dashboards/rooms') }}>
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 cursor-pointer" onClick={() => {
+                        setpageLoading(true)
+                        router.push('/dashboards/rooms')
+                    }}>
                         <div className="flex justify-between items-center">
                             <div>
                                 <p className="text-sm font-medium text-gray-500">Total Rooms</p>
@@ -169,7 +182,10 @@ export default function Dashboard() {
                     </div>
 
                     {/* Room Status */}
-                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#c59f56] cursor-pointer" onClick={() => { router.push('/dashboards/rooms') }}>
+                    <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-[#c59f56] cursor-pointer" onClick={() => {
+                        setpageLoading(true)
+                        router.push('/dashboards/rooms')
+                    }}>
                         <div className="flex justify-between items-center">
                             <div>
                                 <p className="text-sm font-medium text-gray-500">Available Rooms</p>

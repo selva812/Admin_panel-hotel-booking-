@@ -8,15 +8,13 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const dateParam = searchParams.get('date')
-
-    // Requested date (default: today)
     const requestedDate = dateParam ? new Date(dateParam) : new Date()
     requestedDate.setHours(0, 0, 0, 0)
 
     const nextDay = new Date(requestedDate)
     nextDay.setDate(nextDay.getDate() + 1)
 
-    // Fetch all bookings with their booking rooms and room details
+    // Fetch only confirmed bookings (status: true AND bookingstatus not equal to 2 for advance requests)
     const bookings = await prisma.booking.findMany({
       include: {
         bookedRooms: {
@@ -26,7 +24,10 @@ export async function GET(req: Request) {
         }
       },
       where: {
-        status: true
+        status: true,
+        bookingstatus: {
+          not: 2 // Exclude advance booking requests
+        }
       }
     })
 
@@ -38,52 +39,72 @@ export async function GET(req: Request) {
     const totalRooms = allRooms.length
 
     let occupiedRooms: any[] = []
-    let reservedRooms = 0
+    let reservedRooms: any[] = []
     let overdueRooms = 0
+
+    // Create a set to track unique room IDs to avoid double counting
+    const occupiedRoomIds = new Set<number>()
+    const reservedRoomIds = new Set<number>()
 
     bookings.forEach(booking => {
       booking.bookedRooms.forEach(bookedRoom => {
         const checkIn = new Date(bookedRoom.checkIn)
         const checkOut = new Date(bookedRoom.checkOut)
+        checkIn.setHours(0, 0, 0, 0)
+        checkOut.setHours(0, 0, 0, 0)
 
-        // OCCUPIED (check-in date has passed and not checked out yet)
-        if (checkIn <= requestedDate && !bookedRoom.isCheckedOut) {
-          occupiedRooms.push({
-            roomId: bookedRoom.roomId,
-            roomNumber: bookedRoom.room.roomNumber,
-            checkIn: bookedRoom.checkIn,
-            checkOut: bookedRoom.checkOut,
-            isExtended: checkOut > new Date(booking.date),
-            isOverstayed: checkOut < requestedDate
-          })
+        // OCCUPIED: Checked in and not checked out yet
+        if (checkIn <= requestedDate && checkOut >= requestedDate && !bookedRoom.isCheckedOut) {
+          if (!occupiedRoomIds.has(bookedRoom.roomId)) {
+            occupiedRoomIds.add(bookedRoom.roomId)
+            occupiedRooms.push({
+              roomId: bookedRoom.roomId,
+              roomNumber: bookedRoom.room.roomNumber,
+              checkIn: bookedRoom.checkIn,
+              checkOut: bookedRoom.checkOut,
+              isExtended: checkOut > new Date(booking.date),
+              isOverstayed: checkOut < requestedDate,
+              bookingId: booking.id
+            })
 
-          // OVERDUE if checkout date already passed
-          if (checkOut < requestedDate) {
-            overdueRooms++
+            // OVERDUE: Checkout date has passed
+            if (checkOut < requestedDate) {
+              overdueRooms++
+            }
           }
         }
 
-        // RESERVED (future check-in)
-        if (checkIn >= requestedDate && checkIn < nextDay) {
-          reservedRooms++
+        // RESERVED: Future check-in (tomorrow or later)
+        if (checkIn >= nextDay && !bookedRoom.isCheckedOut) {
+          if (!reservedRoomIds.has(bookedRoom.roomId) && !occupiedRoomIds.has(bookedRoom.roomId)) {
+            reservedRoomIds.add(bookedRoom.roomId)
+            reservedRooms.push({
+              roomId: bookedRoom.roomId,
+              roomNumber: bookedRoom.room.roomNumber,
+              checkIn: bookedRoom.checkIn,
+              checkOut: bookedRoom.checkOut,
+              bookingId: booking.id
+            })
+          }
         }
       })
     })
 
-    const availableRooms = totalRooms - (occupiedRooms.length + reservedRooms)
+    const availableRooms = totalRooms - (occupiedRooms.length + reservedRooms.length)
 
     return NextResponse.json({
       totalBookings: bookings.length,
       totalCustomers: await prisma.customer.count(),
       totalRooms,
       occupiedRooms: occupiedRooms.length,
-      reservedRooms,
+      reservedRooms: reservedRooms.length,
       availableRooms,
       overdueRooms,
-      detailedOccupiedRooms: occupiedRooms
+      detailedOccupiedRooms: occupiedRooms,
+      detailedReservedRooms: reservedRooms
     })
   } catch (error) {
-    console.error(error)
+    console.error('Availability API Error:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   } finally {
     await prisma.$disconnect()

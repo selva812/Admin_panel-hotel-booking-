@@ -120,7 +120,7 @@ export const EditBookingModal = ({ booking, onClose }: EditBookingModalProps) =>
                     customerName: data.customerName,
                     checkIn: checkIn,
                     numberOfRooms: Number(data.numberOfRooms),
-                    isadvance: true, // Always advance
+                    isadvance: data.amount ? true : false, // Always advance
                     amount: data.amount,
                     method: Number(data.method),
                     transaction: data.transaction,
@@ -343,7 +343,7 @@ export const EditBookingModal = ({ booking, onClose }: EditBookingModalProps) =>
                             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                 <CreditCard className="w-5 h-5 text-green-600" />
                                 Payment Details
-                                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full ml-2">Required</span>
+                                {/* <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full ml-2">Required</span> */}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
@@ -352,7 +352,7 @@ export const EditBookingModal = ({ booking, onClose }: EditBookingModalProps) =>
                                     </label>
                                     <input
                                         {...register('amount', {
-                                            required: true,
+                                            required: false,
                                             min: 0
                                         })}
                                         type="number"
@@ -367,7 +367,7 @@ export const EditBookingModal = ({ booking, onClose }: EditBookingModalProps) =>
                                         Payment Method *
                                     </label>
                                     <select
-                                        {...register('method', { required: true })}
+                                        {...register('method', { required: false })}
                                         className="border border-gray-300 rounded-lg px-4 py-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 bg-white"
                                     >
                                         {paymentMethods.map((method) => (

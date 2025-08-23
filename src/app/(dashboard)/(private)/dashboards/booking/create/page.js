@@ -75,6 +75,7 @@ export default function BookingPage() {
   const [showCamera, setShowCamera] = useState(false)
   const [bookid, setbookid] = useState('')
   const [includeTax, setIncludeTax] = useState(true)
+  const [selectedRequestBooking, setSelectedRequestBooking] = useState(null)
   const [requestAvailability, setrequestAvailability] = useState({ date: '', totalRooms: 0, bookings: [] })
   const totalRoomPrice = selectedRooms.reduce((sum, room) => {
     const base = isonline
@@ -585,6 +586,45 @@ export default function BookingPage() {
     checkout.setDate(checkout.getDate() + 1)
     setCheckOut(checkout)
   }
+
+  const handleBookingClick = booking => {
+    if (selectedRequestBooking === booking.id) {
+      // Deselect if clicking the same booking
+      setSelectedRequestBooking(null)
+      setcustomerid('')
+      setcustomername('')
+      setcustomerphone('')
+      setbookid('')
+      setSelectedRooms([])
+      setNumberOfRooms(0)
+    } else {
+      // Select the clicked booking
+      setSelectedRequestBooking(booking.id)
+      setcustomerid(booking.customerId)
+      setcustomername(booking.customerName)
+      setcustomerphone(booking.phoneNumber)
+      setbookid(booking.id)
+
+      const bookingRooms = booking.rooms
+        .map(roomNumber => {
+          const roomObj = rooms.find(r => r.roomNumber === roomNumber)
+          if (roomObj) {
+            return {
+              ...roomObj,
+              acSelected: true,
+              adults: 1,
+              children: 0,
+              extraBed: false
+            }
+          }
+          return null
+        })
+        .filter(Boolean)
+
+      setSelectedRooms(bookingRooms)
+      setNumberOfRooms(booking.rooms.length)
+    }
+  }
   return (
     <Suspense fallback={<TransparentLoader />}>
       <div className='min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-6'>
@@ -682,62 +722,29 @@ export default function BookingPage() {
                       {requestAvailability.bookings.map(booking => (
                         <div
                           key={booking.id}
-                          onClick={() => {
-                            if (requestbookid === booking.id) {
-                              setcustomerid('')
-                              setcustomername('')
-                              setcustomerphone('')
-                              setbookid('')
-                              setSelectedRooms([])
-                            } else {
-                              setcustomerid(booking.customerId)
-                              setcustomername(booking.customerName)
-                              setcustomerphone(booking.phoneNumber)
-                              setbookid(booking.id)
-                              const bookingRooms = booking.rooms
-                                .map(roomNumber => {
-                                  const roomObj = rooms.find(r => r.roomNumber === roomNumber)
-                                  if (roomObj) {
-                                    return {
-                                      ...roomObj,
-                                      acSelected: true,
-                                      adults: 1,
-                                      children: 0,
-                                      extraBed: false
-                                    }
-                                  }
-                                  return null
-                                })
-                                .filter(Boolean)
-                              setSelectedRooms(bookingRooms)
-                              setNumberOfRooms(booking.rooms.length)
-                            }
-                          }}
-                          className={`
-              border rounded-lg p-2 cursor-pointer transition-all
-              ${
-                requestbookid === booking.id
-                  ? 'border-blue-500 bg-blue-50 shadow-sm'
-                  : 'border-gray-200 hover:bg-gray-50'
-              }
-            `}
+                          onClick={() => handleBookingClick(booking)}
+                          className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                            selectedRequestBooking === booking.id
+                              ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
                         >
                           <div className='flex justify-between items-start gap-2'>
                             <div className='truncate'>
                               <p className='font-medium text-gray-800 truncate'>{booking.customerName}</p>
-                              <p className='text-xs text-gray-600 truncate'>{booking.phoneNumber}</p>
+                              <p className='text-sm text-gray-600 truncate'>{booking.phoneNumber}</p>
                             </div>
-                            <span className='bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full whitespace-nowrap'>
+                            <span className='bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full whitespace-nowrap'>
                               {booking.rooms.length} {booking.rooms.length > 1 ? 'rooms' : 'room'}
                             </span>
                           </div>
 
-                          <div className='mt-1'>
+                          <div className='mt-3'>
                             <div className='flex flex-wrap gap-1'>
                               {booking.rooms.slice(0, 3).map(roomNumber => (
                                 <span
                                   key={roomNumber}
-                                  className='bg-white border border-gray-200 text-xs px-1.5 py-0.5 rounded'
+                                  className='bg-white border border-gray-200 text-xs px-2 py-1 rounded'
                                 >
                                   {roomNumber}
                                 </span>
@@ -746,7 +753,7 @@ export default function BookingPage() {
                                 <span className='text-xs text-gray-500'>+{booking.rooms.length - 3} more</span>
                               )}
                             </div>
-                            <p className='text-xs text-gray-500 mt-1 truncate'>
+                            <p className='text-xs text-gray-500 mt-2'>
                               {new Date(booking.date).toLocaleString([], {
                                 year: 'numeric',
                                 month: 'short',

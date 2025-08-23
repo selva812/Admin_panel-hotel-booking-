@@ -9,6 +9,7 @@ import menuSectionStyles from '@core/styles/vertical/menuSectionStyles'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { TransparentLoader } from '@/components/transparent'
 
 type RenderExpandIconProps = {
   open?: boolean
@@ -82,6 +83,7 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
             onScrollY: container => scrollMenu(container, true)
           })}
       >
+        {showLoader && <TransparentLoader />}
         <Menu
           popoutMenuOffset={{ mainAxis: 17 }}
           menuItemStyles={menuItemStyles(verticalNavOptions, theme)}

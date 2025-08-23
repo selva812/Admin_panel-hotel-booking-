@@ -159,6 +159,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Error fetching bookings' }, { status: 500 })
   }
 }
+
 export async function POST(req: NextRequest) {
   try {
     const user = verifyToken(req)
@@ -343,139 +344,379 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
+// export async function PUT(req: NextRequest) {
+//   try {
+//     const user = verifyToken(req)
+//     if (!user) {
+//       return NextResponse.json({ message: 'Unauthorized' }, { status: 403 })
+//     }
+//     const body = await req.json()
+//     const {
+//       bookingId,
+//       phoneNumber,
+//       customerName,
+//       checkIn,
+//       numberOfRooms,
+//       isadvance,
+//       amount,
+//       method,
+//       transaction,
+//       arriveFrom
+//     } = body
+//     console.log('[DEBUG] PUT request body:', body)
+//     // Validate required fields
+//     if (!bookingId || !phoneNumber || !customerName || !checkIn || !numberOfRooms) {
+//       console.log('[DEBUG] Missing required fields:', {
+//         bookingId,
+//         phoneNumber,
+//         customerName,
+//         checkIn,
+//         numberOfRooms
+//       })
+//       return NextResponse.json(
+//         { message: 'Missing required fields (bookingId, phoneNumber, customerName, checkIn, numberOfRooms)' },
+//         { status: 400 }
+//       )
+//     }
+
+//     // Parse and validate date
+//     const checkInDate = new Date(checkIn)
+//     if (isNaN(checkInDate.getTime())) {
+//       return NextResponse.json({ message: 'Invalid date format' }, { status: 400 })
+//     }
+//     const result = await prisma.$transaction(async tx => {
+//       const existingBooking = await tx.booking.findUnique({
+//         where: { id: Number(bookingId) },
+//         include: { customer: true }
+//       })
+
+//       if (!existingBooking) {
+//         throw new Error('Booking not found')
+//       }
+
+//       if (existingBooking.userId !== user.id) {
+//         throw new Error('Unauthorized to update this booking')
+//       }
+
+//       // 2. Update customer information if changed
+//       let customer = existingBooking.customer
+//       const customerChanged = customer.phoneNumber !== phoneNumber || customer.name !== customerName
+
+//       if (customerChanged) {
+//         customer = await tx.customer.update({
+//           where: { id: existingBooking.customerId },
+//           data: {
+//             phoneNumber,
+//             name: customerName
+//           }
+//         })
+//       }
+
+//       // 3. Prepare booking update data
+//       const bookingUpdateData = {
+//         date: checkInDate,
+//         rooms: numberOfRooms,
+//         isadvance: isadvance,
+//         ...(arriveFrom && { arriveFrom })
+//       }
+
+//       // 4. Update the booking
+//       const updatedBooking = await tx.booking.update({
+//         where: { id: Number(bookingId) },
+//         data: bookingUpdateData
+//       })
+
+//       // 5. Handle advance payment updates
+
+//       if (isadvance) {
+//         const hasValidAmount = typeof amount === 'number' && !isNaN(amount)
+//         const hasValidMethod = typeof method === 'number' && method >= 0
+
+//         if (hasValidAmount && hasValidMethod) {
+//           // Check for existing advance payment
+//           const existingPayment = await tx.payment.findFirst({
+//             where: {
+//               bookingId: Number(bookingId),
+//               isadvance: true
+//             }
+//           })
+
+//           if (existingPayment) {
+//             await tx.payment.update({
+//               where: { id: existingPayment.id },
+//               data: {
+//                 amount: new Prisma.Decimal(amount),
+//                 method,
+//                 transactionid: transaction || null,
+//                 date: new Date()
+//               }
+//             })
+//           } else {
+//             await tx.payment.create({
+//               data: {
+//                 amount: new Prisma.Decimal(amount),
+//                 bookingId: Number(bookingId),
+//                 method,
+//                 note: `Advance payment for booking ${updatedBooking.bookingref}`,
+//                 transactionid: transaction || null,
+//                 date: new Date(),
+//                 isadvance: true
+//               }
+//             })
+//           }
+//         } else {
+//           console.log('[DEBUG] Advance true but missing amount/method → skipping payment update')
+//         }
+//       } else {
+//         // delete old advance payments if user unchecked it
+//         await tx.payment.deleteMany({
+//           where: {
+//             bookingId: Number(bookingId),
+//             isadvance: true
+//           }
+//         })
+//       }
+
+//       return { booking: updatedBooking, customer }
+//     })
+//     return NextResponse.json(
+//       {
+//         message: 'Booking updated successfully',
+//         booking: result.booking,
+//         customer: result.customer,
+//         status: 'UPDATED'
+//       },
+//       { status: 200 }
+//     )
+//   } catch (error) {
+//     console.error('[DEBUG] Booking update error:', error)
+//     return NextResponse.json(
+//       {
+//         message: error instanceof Error ? error.message : 'Error updating booking',
+//         ...(process.env.NODE_ENV === 'development' && {
+//           stack: error instanceof Error ? error.stack : undefined,
+//           fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+//         })
+//       },
+//       { status: 500 }
+//     )
+//   } finally {
+//     await prisma.$disconnect()
+//   }
+// }
+
+const tag = (step: string) => `[PUT/BookingUpdate] ${step}`
+
+function toTrimmedOrNull(v: unknown): string | null {
+  if (v === undefined || v === null) return null
+  if (typeof v !== 'string') return String(v)
+  const t = v.trim()
+  return t === '' ? null : t
+}
+
+function toBoolLoose(v: unknown): boolean {
+  // Accept true/false, 'true'/'false', 1/'1'/0/'0'
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v === 1
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase()
+    return s === 'true' || s === '1'
+  }
+  return false
+}
+
+function toNumberOrNull(v: unknown): number | null {
+  if (v === undefined || v === null) return null
+  if (typeof v === 'string' && v.trim() === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function isValidAmount(n: number | null): n is number {
+  return n !== null && Number.isFinite(n)
+}
+
+function isValidMethod(n: number | null): n is number {
+  // allow 0 (cash) and positive ints
+  return n !== null && Number.isInteger(n) && n >= 0
+}
+
+// ---------- Handler ----------
 export async function PUT(req: NextRequest) {
+  console.log(tag('START'))
+
   try {
+    // 0) Auth
     const user = verifyToken(req)
-    if (!user) {
+    console.log(tag('AUTH'), { userPresent: !!user, userId: user?.id })
+    if (user.role !== 'ADMIN') {
+      console.log(tag('AUTH_FAIL'))
       return NextResponse.json({ message: 'Unauthorized' }, { status: 403 })
     }
-    const body = await req.json()
-    const {
+
+    // 1) Parse body
+    const raw = await req.json()
+    console.log(tag('BODY_RAW'), raw)
+
+    // 2) Normalize inputs
+    const bookingId = toNumberOrNull(raw?.bookingId)
+    const phoneNumber = toTrimmedOrNull(raw?.phoneNumber)
+    const customerName = toTrimmedOrNull(raw?.customerName)
+    const checkInRaw = raw?.checkIn
+    const numberOfRooms = toNumberOrNull(raw?.numberOfRooms)
+
+    const isadvance = toBoolLoose(raw?.isadvance)
+    const amountNum = toNumberOrNull(raw?.amount) // '' -> null
+    const methodNum = toNumberOrNull(raw?.method) // "0" -> 0, '' -> null
+    const transactionId = toTrimmedOrNull(raw?.transaction)
+    const arriveFrom = toTrimmedOrNull(raw?.arriveFrom)
+
+    console.log(tag('BODY_NORMALIZED'), {
       bookingId,
       phoneNumber,
       customerName,
-      checkIn,
+      checkInRaw,
       numberOfRooms,
       isadvance,
-      amount,
-      method,
-      transaction,
+      amountNum,
+      methodNum,
+      transactionId,
       arriveFrom
-    } = body
+    })
 
-    // Validate required fields
-    if (!bookingId || !phoneNumber || !customerName || !checkIn || !numberOfRooms) {
-      console.log('[DEBUG] Missing required fields:', {
-        bookingId,
-        phoneNumber,
-        customerName,
-        checkIn,
-        numberOfRooms
+    // 3) Validate required fields
+    if (!bookingId || !phoneNumber || !customerName || !checkInRaw || !numberOfRooms) {
+      console.log(tag('VALIDATION_FAIL'), {
+        hasBookingId: !!bookingId,
+        hasPhoneNumber: !!phoneNumber,
+        hasCustomerName: !!customerName,
+        hasCheckIn: !!checkInRaw,
+        hasRooms: !!numberOfRooms
       })
       return NextResponse.json(
-        { message: 'Missing required fields (bookingId, phoneNumber, customerName, checkIn, numberOfRooms)' },
+        {
+          message: 'Missing required fields (bookingId, phoneNumber, customerName, checkIn, numberOfRooms)'
+        },
         { status: 400 }
       )
     }
 
-    // Parse and validate date
-    const checkInDate = new Date(checkIn)
+    // 4) Parse date
+    const checkInDate = new Date(checkInRaw)
     if (isNaN(checkInDate.getTime())) {
+      console.log(tag('DATE_PARSE_FAIL'))
       return NextResponse.json({ message: 'Invalid date format' }, { status: 400 })
     }
+
+    // 5) Transaction
     const result = await prisma.$transaction(async tx => {
+      // 5.a) Fetch existing booking
       const existingBooking = await tx.booking.findUnique({
         where: { id: Number(bookingId) },
         include: { customer: true }
       })
 
       if (!existingBooking) {
+        console.log(tag('TX_FETCH_BOOKING_FAIL'))
         throw new Error('Booking not found')
       }
 
-      if (existingBooking.userId !== user.id) {
-        throw new Error('Unauthorized to update this booking')
-      }
-
-      // 2. Update customer information if changed
+      // 5.b) Update customer if changed
       let customer = existingBooking.customer
-      const customerChanged = customer.phoneNumber !== phoneNumber || customer.name !== customerName
+      const customerChanged = (customer.phoneNumber ?? '') !== phoneNumber || (customer.name ?? '') !== customerName
+      console.log(tag('TX_CUSTOMER_DIFF'), { customerChanged })
 
       if (customerChanged) {
+        console.log(tag('TX_CUSTOMER_UPDATE_BEFORE'), {
+          customerId: existingBooking.customerId,
+          phoneNumber,
+          customerName
+        })
         customer = await tx.customer.update({
           where: { id: existingBooking.customerId },
           data: {
-            phoneNumber,
-            name: customerName
+            phoneNumber: phoneNumber!, // validated above
+            name: customerName!
           }
         })
+        console.log(tag('TX_CUSTOMER_UPDATE_AFTER'), { customerId: customer.id })
       }
 
-      // 3. Prepare booking update data
-      const bookingUpdateData = {
+      // 5.c) Update booking core fields
+      const bookingUpdateData: any = {
         date: checkInDate,
         rooms: numberOfRooms,
-        isadvance: isadvance,
-        ...(arriveFrom && { arriveFrom })
+        isadvance: isadvance
       }
-
-      // 4. Update the booking
+      if (arriveFrom !== null) bookingUpdateData.arriveFrom = arriveFrom
       const updatedBooking = await tx.booking.update({
         where: { id: Number(bookingId) },
         data: bookingUpdateData
       })
 
-      // 5. Handle advance payment updates
-
       if (isadvance) {
-        const shouldProcessPayment = amount !== undefined && method !== undefined && (method === 0 || !!method)
+        const canProcessPayment = isValidAmount(amountNum) && isValidMethod(methodNum)
 
-        if (shouldProcessPayment) {
-          // Check for existing advance payment
+        if (canProcessPayment) {
+          // Look for existing advance payment
+          console.log(tag('TX_PAYMENT_FIND_EXISTING'), { bookingId })
           const existingPayment = await tx.payment.findFirst({
-            where: {
-              bookingId: Number(bookingId),
-              isadvance: true
-            }
+            where: { bookingId: Number(bookingId), isadvance: true }
           })
+          console.log(tag('TX_PAYMENT_EXISTING'), { found: !!existingPayment })
 
           if (existingPayment) {
-            const updatedPayment = await tx.payment.update({
+            console.log(tag('TX_PAYMENT_UPDATE_BEFORE'), {
+              paymentId: existingPayment.id,
+              amountNum,
+              methodNum,
+              transactionId
+            })
+            await tx.payment.update({
               where: { id: existingPayment.id },
               data: {
-                amount: new Prisma.Decimal(amount),
-                method: Number(method),
-                transactionid: transaction,
+                amount: new Prisma.Decimal(amountNum!), // safe due to guard
+                method: methodNum!,
+                transactionid: transactionId,
                 date: new Date()
               }
             })
           } else {
-            const newPayment = await tx.payment.create({
+            const created = await tx.payment.create({
               data: {
-                amount: new Prisma.Decimal(amount),
+                amount: new Prisma.Decimal(amountNum!),
                 bookingId: Number(bookingId),
-                method: Number(method),
+                method: methodNum!,
                 note: `Advance payment for booking ${updatedBooking.bookingref}`,
-                transactionid: transaction,
+                transactionid: transactionId,
                 date: new Date(),
                 isadvance: true
               }
             })
           }
         } else {
-          console.log('[DEBUG] Advance payment requested but missing amount or method')
+          console.log(tag('TX_PAYMENT_SKIP'), 'Advance=true but missing/invalid amount or method')
         }
       } else {
+        // If advance is unchecked, remove any existing advance payments
+        console.log(tag('TX_PAYMENT_DELETE_MANY_BEFORE'), { bookingId })
         const deleteResult = await tx.payment.deleteMany({
-          where: {
-            bookingId: Number(bookingId),
-            isadvance: true
-          }
+          where: { bookingId: Number(bookingId), isadvance: true }
+        })
+        console.log(tag('TX_PAYMENT_DELETE_MANY_AFTER'), {
+          count: deleteResult.count
         })
       }
 
+      console.log(tag('TX_END_OK'))
       return { booking: updatedBooking, customer }
     })
+
+    console.log(tag('END_OK'), {
+      bookingId: result.booking.id,
+      customerId: result.customer.id
+    })
+
     return NextResponse.json(
       {
         message: 'Booking updated successfully',
@@ -485,19 +726,27 @@ export async function PUT(req: NextRequest) {
       },
       { status: 200 }
     )
-  } catch (error) {
-    console.error('[DEBUG] Booking update error:', error)
+  } catch (error: any) {
+    console.error(tag('ERROR'), error?.message || error)
+
+    // Try to expose friendly + debug info (no secrets)
     return NextResponse.json(
       {
         message: error instanceof Error ? error.message : 'Error updating booking',
-        ...(process.env.NODE_ENV === 'development' && {
-          stack: error instanceof Error ? error.stack : undefined,
-          fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
-        })
+        debug:
+          process.env.NODE_ENV !== 'production'
+            ? {
+                name: error?.name,
+                message: error?.message,
+                code: error?.code,
+                meta: error?.meta
+              }
+            : undefined
       },
       { status: 500 }
     )
   } finally {
+    console.log(tag('FINALLY_DISCONNECT'))
     await prisma.$disconnect()
   }
 }

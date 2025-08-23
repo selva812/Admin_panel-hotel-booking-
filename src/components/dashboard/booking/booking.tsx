@@ -634,6 +634,10 @@ export default function BookingTable() {
                                                                     className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors duration-150"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
+                                                                        if (!isAdmin) {
+                                                                            toast.error('Only Admin has access to Delete');
+                                                                            return;
+                                                                        }
                                                                         setSelectedBooking(booking);
                                                                         setShowDeleteModal(true);
                                                                     }}
