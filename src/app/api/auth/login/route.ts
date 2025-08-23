@@ -8,14 +8,28 @@ const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET as string
 
 export async function POST(req: Request) {
+  console.log('Auth API called')
   try {
-    const { emailOrUsername, password } = await req.json()
+    const body = await req.json()
+    console.log('Request body:', body)
+
+    const { emailOrUsername, password } = body
     if (!emailOrUsername || !password) {
+      console.log('Missing credentials')
       return NextResponse.json({ message: 'Email or username and password are required' }, { status: 400 })
     }
 
-    // Determine if it's an email (basic check)
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrUsername)
+    // Check if Prisma is connected
+    try {
+      await prisma.$connect()
+      console.log('Database connected successfully')
+    } catch (dbError: any) {
+      console.error('Database connection failed:', dbError)
+      return NextResponse.json({ message: 'Database connection failed', error: dbError.message }, { status: 500 })
+    }
+
+    const isEmail = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+\$/.test(emailOrUsername)
+    console.log(`Is email: ${isEmail}, value: ${emailOrUsername}`)
 
     const user = await prisma.user.findUnique({
       where: isEmail ? { email: emailOrUsername } : { name: emailOrUsername },
@@ -29,7 +43,17 @@ export async function POST(req: Request) {
       }
     })
 
-    if (!user || !(await comparePassword(password, user.password))) {
+    console.log(`User found: ${user ? user.id : 'None'}`)
+
+    if (!user) {
+      console.log('User not found')
+      return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 })
+    }
+
+    const passwordMatch = await comparePassword(password, user.password)
+    console.log(`Password match: ${passwordMatch}`)
+
+    if (!passwordMatch) {
       return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 })
     }
 
@@ -37,6 +61,12 @@ export async function POST(req: Request) {
       where: { id: user.id },
       data: { lastLogin: new Date() }
     })
+
+    // Check if JWT_SECRET is available
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not defined')
+      return NextResponse.json({ message: 'Server configuration error' }, { status: 500 })
+    }
 
     const token = jwt.sign(
       {
@@ -49,10 +79,23 @@ export async function POST(req: Request) {
     )
 
     const { password: _, ...safeUser } = user
+    console.log('Login successful for user:', safeUser.email)
 
-    return NextResponse.json({ message: 'Login successful', user: safeUser, token })
+    return NextResponse.json({
+      message: 'Login successful',
+      user: safeUser,
+      token
+    })
   } catch (error: any) {
-    return NextResponse.json({ message: 'Authentication failed', error: error.message }, { status: 500 })
+    console.error('Authentication error:', error)
+    return NextResponse.json(
+      {
+        message: 'Authentication failed',
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
+      { status: 500 }
+    )
   } finally {
     await prisma.$disconnect()
   }
