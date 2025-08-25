@@ -573,7 +573,14 @@ export default function RequestBookingPage() {
                                 </section>
 
                                 {/* Step 2: Room Selection */}
-                                {date && room.available > 0 && (
+                                {date && room.available > 0 && (<>
+                                    {roomloading ? (
+                                        <div className="flex justify-center items-center p-4 space-x-2">
+                                            <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
+                                            <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                                            <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                                        </div>
+                                    ) : null}
                                     <section className="p-4 bg-white rounded-lg border border-gray-200">
                                         <h3 className="text-lg font-semibold mb-4 text-gray-800">2️⃣ Select Rooms</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -677,6 +684,7 @@ export default function RequestBookingPage() {
                                             })}
                                         </div>
                                     </section>
+                                </>
                                 )}
 
                                 {/* Step 3: Payment */}

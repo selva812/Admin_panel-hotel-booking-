@@ -147,7 +147,7 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
                 }}>
                 Check Out
               </MenuItem>
-              {user?.role !== 'STAFF' &&
+              {user?.role !== 'STAFF' && user?.role !== 'MANAGER' &&
                 <MenuItem
                   href="/dashboards/rooms/edit"
                   icon={<i className="ri-edit-box-line" />}
@@ -224,7 +224,7 @@ const VerticalMenu = ({ scrollMenu }: Props) => {
 
           </MenuSection>
 
-          {user?.role !== 'STAFF' &&
+          {user?.role !== 'STAFF' && user?.role !== 'MANAGER' &&
             <MenuSection label={'Staff'}>
               <SubMenu label={'Staff Management'} icon={<i className='ri-team-line' />}>
                 <MenuItem

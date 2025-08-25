@@ -134,9 +134,9 @@
 //     await prisma.$disconnect()
 //   }
 // }
-
 import { prisma } from '@/libs/prisma'
 import { fromZonedTime } from 'date-fns-tz'
+import { startOfDay, endOfDay } from 'date-fns'
 import { NextRequest, NextResponse } from 'next/server'
 const INDIA_TIMEZONE = 'Asia/Kolkata'
 
@@ -159,6 +159,15 @@ export async function GET(request: NextRequest) {
 
     const requestedMoment = date
     console.log('request moment', requestedMoment)
+
+    // Get start and end of the requested day in IST
+    const requestedDateIST = fromZonedTime(dateParam, INDIA_TIMEZONE)
+    const startOfRequestedDayIST = startOfDay(requestedDateIST)
+    const endOfRequestedDayIST = endOfDay(requestedDateIST)
+
+    // Convert IST day boundaries to UTC for database queries
+    const startOfRequestedDay = fromZonedTime(startOfRequestedDayIST, INDIA_TIMEZONE)
+    const endOfRequestedDay = fromZonedTime(endOfRequestedDayIST, INDIA_TIMEZONE)
 
     // Fetch all rooms with relations
     const allRooms = await prisma.room.findMany({
@@ -196,28 +205,62 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 2. Fetch future bookings within 24 hours (Blocked status)
-    const twentyFourHoursLater = new Date(requestedMoment.getTime() + 24 * 60 * 60 * 1000)
-    const blockedBookings = await prisma.booking.findMany({
+    // 2. Fetch advance bookings that should be blocked
+    // This includes:
+    // - Bookings that check-in during the requested day
+    // - Bookings that check-in within 24 hours from the end of requested day
+    const twentyFourHoursFromEndOfDay = new Date(endOfRequestedDay.getTime() + 24 * 60 * 60 * 1000)
+
+    const advanceBookings = await prisma.booking.findMany({
       where: {
-        bookedRooms: {
-          some: {
-            checkIn: {
-              gt: requestedMoment,
-              lte: twentyFourHoursLater
-            },
-            isCheckedOut: false
+        OR: [
+          // Bookings checking in during the requested day
+          {
+            bookedRooms: {
+              some: {
+                checkIn: {
+                  gte: startOfRequestedDay,
+                  lte: endOfRequestedDay
+                },
+                isCheckedOut: false
+              }
+            }
+          },
+          // Advance bookings within 24 hours (for blocking logic)
+          {
+            bookedRooms: {
+              some: {
+                checkIn: {
+                  gt: endOfRequestedDay,
+                  lte: twentyFourHoursFromEndOfDay
+                },
+                isCheckedOut: false
+              }
+            }
           }
-        }
+        ]
       },
       select: {
+        id: true,
+        isadvance: true, // Include advance booking flag
         bookedRooms: {
           where: {
-            checkIn: {
-              gt: requestedMoment,
-              lte: twentyFourHoursLater
-            },
-            isCheckedOut: false
+            OR: [
+              {
+                checkIn: {
+                  gte: startOfRequestedDay,
+                  lte: endOfRequestedDay
+                },
+                isCheckedOut: false
+              },
+              {
+                checkIn: {
+                  gt: endOfRequestedDay,
+                  lte: twentyFourHoursFromEndOfDay
+                },
+                isCheckedOut: false
+              }
+            ]
           },
           select: {
             roomId: true,
@@ -229,23 +272,25 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 3. Fetch regular future bookings (beyond 24 hours)
+    // 3. Fetch regular future bookings (beyond 24 hours from end of day)
     const regularFutureBookings = await prisma.booking.findMany({
       where: {
         bookedRooms: {
           some: {
             checkIn: {
-              gt: twentyFourHoursLater
+              gt: twentyFourHoursFromEndOfDay
             },
             isCheckedOut: false
           }
         }
       },
       select: {
+        id: true,
+        isadvance: true,
         bookedRooms: {
           where: {
             checkIn: {
-              gt: twentyFourHoursLater
+              gt: twentyFourHoursFromEndOfDay
             },
             isCheckedOut: false
           },
@@ -271,21 +316,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Populate blocked rooms (within 24 hours)
-    for (const booking of blockedBookings) {
+    // Populate blocked/advance booked rooms
+    for (const booking of advanceBookings) {
       for (const br of booking.bookedRooms) {
         // Only add if not already occupied
         if (!occupiedMap.has(br.roomId)) {
-          blockedMap.set(br.roomId, {
-            checkIn: br.checkIn,
-            checkOut: br.checkOut,
-            status: 'blocked'
-          })
+          // Determine if this should be blocked based on advance booking logic
+          const isCheckingInToday = br.checkIn >= startOfRequestedDay && br.checkIn <= endOfRequestedDay
+          const isAdvanceWithin24Hours = br.checkIn > endOfRequestedDay && br.checkIn <= twentyFourHoursFromEndOfDay
+
+          if (isCheckingInToday || (booking.isadvance && isAdvanceWithin24Hours)) {
+            blockedMap.set(br.roomId, {
+              checkIn: br.checkIn,
+              checkOut: br.checkOut,
+              status: 'blocked'
+            })
+          }
         }
       }
     }
 
-    // Populate regular booked rooms (beyond 24 hours)
+    // Populate regular booked rooms (beyond 24 hours from end of day)
     for (const booking of regularFutureBookings) {
       for (const br of booking.bookedRooms) {
         // Only add if not already occupied or blocked
@@ -343,6 +394,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       date: requestedMoment.toISOString(),
+      requestedDay: {
+        start: startOfRequestedDay.toISOString(),
+        end: endOfRequestedDay.toISOString()
+      },
       totalRooms,
       occupied: occupiedCount,
       blocked: blockedCount,

@@ -319,15 +319,12 @@ function generateHTML(invoice: InvoiceData): string {
         return date.toLocaleString('en-IN', {
           day: '2-digit',
           month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
+          year: 'numeric'
         })
       }
 
       // Fallback to date-fns for SSR or problematic environments
-      return format(new Date(dateString), 'dd MMM yyyy, hh:mm a')
+      return format(new Date(dateString), 'dd MMM yyyy')
     } catch (error) {
       console.error('Date formatting error:', error)
       return dateString // Return original if formatting fails

@@ -54,21 +54,26 @@ export async function GET(req: Request) {
         checkOut.setHours(0, 0, 0, 0)
 
         // OCCUPIED: Checked in and not checked out yet
-        if (checkIn <= requestedDate && checkOut >= requestedDate && !bookedRoom.isCheckedOut) {
+        // Changed condition: checkIn <= requestedDate && checkOut >= requestedDate
+        // to: checkIn <= requestedDate && (checkOut > requestedDate || !bookedRoom.isCheckedOut)
+        if (checkIn <= requestedDate && (checkOut > requestedDate || !bookedRoom.isCheckedOut)) {
           if (!occupiedRoomIds.has(bookedRoom.roomId)) {
             occupiedRoomIds.add(bookedRoom.roomId)
+            const isOverstayed = checkOut < requestedDate
+
             occupiedRooms.push({
               roomId: bookedRoom.roomId,
               roomNumber: bookedRoom.room.roomNumber,
               checkIn: bookedRoom.checkIn,
               checkOut: bookedRoom.checkOut,
               isExtended: checkOut > new Date(booking.date),
-              isOverstayed: checkOut < requestedDate,
+              isOverstayed: isOverstayed,
+              isCheckedOut: bookedRoom.isCheckedOut,
               bookingId: booking.id
             })
 
-            // OVERDUE: Checkout date has passed
-            if (checkOut < requestedDate) {
+            // OVERDUE: Checkout date has passed but guest hasn't checked out
+            if (isOverstayed) {
               overdueRooms++
             }
           }

@@ -11,6 +11,11 @@ const Userinfo = () => {
       color: 'bg-indigo-50 text-indigo-700',
       icon: '👔'
     },
+    MANAGER: {
+      label: 'Manager',
+      color: 'bg-blue-50 text-blue-700',
+      icon: '📊'
+    },
     ADMIN: {
       label: 'Administrator',
       color: 'bg-purple-50 text-purple-700',

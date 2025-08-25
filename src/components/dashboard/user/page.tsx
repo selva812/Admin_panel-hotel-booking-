@@ -15,7 +15,7 @@ interface ActivityLog {
     timestamp: string;
     user: {
         name: string;
-        role: string;
+        role: number;
     };
 }
 
@@ -317,7 +317,7 @@ export default function Dashboard() {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                                        {activity.user.role}
+                                                        {activity.user.role === 0 ? "Staff" : activity.user.role === 1 ? "Admin" : "Manager"}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

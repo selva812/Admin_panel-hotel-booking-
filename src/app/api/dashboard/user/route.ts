@@ -20,8 +20,6 @@ export async function GET() {
     const endOfToday = new Date(now)
     endOfToday.setHours(23, 59, 59, 999)
 
-    console.log('🕒 Time Ranges:', { now, thirtyDaysAgo, sevenDaysAgo, startOfToday, endOfToday })
-
     // Wrap all promises with try/catch logging
     const [
       userCount,
@@ -189,10 +187,10 @@ export async function GET() {
       // })
     ])
 
-    console.log('✅ All DB queries executed successfully')
+    // console.log('✅ All DB queries executed successfully')
 
-    // Debug topStaff data
-    console.log('👥 Top staff raw data:', topStaffData)
+    // // Debug topStaff data
+    // console.log('👥 Top staff raw data:', topStaffData)
 
     const topStaffWithDetails = await Promise.all(
       topStaffData.map(async staff => {
@@ -203,7 +201,7 @@ export async function GET() {
         return { ...staff, user: userDetails, bookingCount: staff._count.id }
       })
     )
-    console.log('👥 Top staff with details:', topStaffWithDetails)
+    // console.log('👥 Top staff with details:', topStaffWithDetails)
 
     const stats = {
       userCount,
@@ -247,7 +245,7 @@ export async function GET() {
           : 0
     }
 
-    console.log('✅ Final Stats Object:', stats)
+    // console.log('✅ Final Stats Object:', stats)
 
     return NextResponse.json(stats, { status: 200 })
   } catch (error: any) {
